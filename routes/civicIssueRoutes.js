@@ -17,6 +17,18 @@ router.get('/:id', verifyToken, checkRole(), civicIssueController.getCivicIssueB
 // Update status (admin/coordinator only — enforced in controller)
 router.patch('/:id/status', verifyToken, checkRole(), civicIssueController.updateCivicIssueStatus);
 
+// Assign coordinator (admin only)
+router.patch('/:id/assign', verifyToken, checkRole(), civicIssueController.assignCoordinator);
+
+// Coordinator marks issue complete with proof
+router.patch('/:id/complete', verifyToken, checkRole(), civicIssueController.completeIssue);
+
+// Admin approves resolution
+router.patch('/:id/approve', verifyToken, checkRole(), civicIssueController.approveIssue);
+
+// User submits feedback/rating
+router.patch('/:id/feedback', verifyToken, checkRole(), civicIssueController.submitFeedback);
+
 // Delete (admin/coordinator only — enforced in controller)
 router.delete('/:id', verifyToken, checkRole(), civicIssueController.deleteCivicIssue);
 

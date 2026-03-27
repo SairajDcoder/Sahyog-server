@@ -120,6 +120,27 @@ const listUsers = async (req, res) => {
     }
 };
 
+// @desc    List all coordinators
+// @route   GET /api/users/coordinators
+// @access  Private
+const listCoordinators = async (req, res) => {
+    try {
+        const result = await db.query(
+            `SELECT u.id, u.full_name, u.email, u.phone, u.avatar_url, u.is_active
+             FROM users u
+             WHERE u.role = 'coordinator'
+             ORDER BY u.full_name ASC`
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error('[500] listCoordinators error:', err?.message || err);
+        res.status(500).json({
+            message: 'Failed to list coordinators',
+            ...(process.env.NODE_ENV !== 'production' && { detail: err?.message }),
+        });
+    }
+};
+
 // @desc    Onboard user with form details
 // @route   POST /api/users/onboard
 // @access  Private
@@ -320,5 +341,6 @@ module.exports = {
     updateMyLocation,
     toggleMyAvailability,
     listLiveVolunteers,
-    updateMe
+    updateMe,
+    listCoordinators
 };

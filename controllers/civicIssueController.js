@@ -226,10 +226,168 @@ async function deleteCivicIssue(req, res) {
   }
 }
 
+// PATCH /api/v1/civic-issues/:id/assign
+async function assignCoordinator(req, res) {
+  try {
+    const { id } = req.params;
+    const { coordinator_id } = req.body;
+    const role = req.role || 'user';
+
+    if (!['admin', 'organization'].includes(role)) {
+      return res.status(403).json({ message: 'Only admins or organizations can assign coordinators' });
+    }
+    if (!coordinator_id) {
+      return res.status(400).json({ message: 'coordinator_id is required' });
+    }
+
+    const result = await db.query(
+      `UPDATE civic_issues
+       SET assigned_coordinator_id = $1, status = 'in_progress', updated_at = NOW()
+       WHERE id = $2
+       RETURNING *,
+         ST_X(location::geometry) AS lng,
+         ST_Y(location::geometry) AS lat`,
+      [coordinator_id, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Civic issue not found' });
+    }
+
+    const issue = result.rows[0];
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('civic_issue_assigned', issue);
+    }
+
+    res.json(issue);
+  } catch (err) {
+    console.error('Error assigning coordinator:', err);
+    res.status(500).json({ message: 'Failed to assign coordinator' });
+  }
+}
+
+// PATCH /api/v1/civic-issues/:id/complete
+async function completeIssue(req, res) {
+  try {
+    const { id } = req.params;
+    const { resolution_notes, resolution_proof_urls } = req.body;
+    const { userId } = req.auth || {};
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Verify the coordinator is assigned to this issue
+    const check = await db.query(
+      `SELECT * FROM civic_issues WHERE id = $1`,
+      [id]
+    );
+    if (check.rows.length === 0) {
+      return res.status(404).json({ message: 'Civic issue not found' });
+    }
+
+    const result = await db.query(
+      `UPDATE civic_issues
+       SET status = 'completed',
+           resolution_notes = $1,
+           resolution_proof_urls = $2,
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING *,
+         ST_X(location::geometry) AS lng,
+         ST_Y(location::geometry) AS lat`,
+      [resolution_notes || null, resolution_proof_urls || null, id]
+    );
+
+    const issue = result.rows[0];
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('civic_issue_completed', issue);
+    }
+
+    res.json(issue);
+  } catch (err) {
+    console.error('Error completing civic issue:', err);
+    res.status(500).json({ message: 'Failed to complete civic issue' });
+  }
+}
+
+// PATCH /api/v1/civic-issues/:id/approve
+async function approveIssue(req, res) {
+  try {
+    const { id } = req.params;
+    const role = req.role || 'user';
+
+    if (!['admin', 'organization'].includes(role)) {
+      return res.status(403).json({ message: 'Only admins or organizations can approve resolutions' });
+    }
+
+    const result = await db.query(
+      `UPDATE civic_issues
+       SET admin_approved = true, status = 'resolved', resolved_at = NOW(), updated_at = NOW()
+       WHERE id = $1
+       RETURNING *,
+         ST_X(location::geometry) AS lng,
+         ST_Y(location::geometry) AS lat`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Civic issue not found' });
+    }
+
+    const issue = result.rows[0];
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('civic_issue_resolved', { id: issue.id, reporter_id: issue.reporter_id });
+    }
+
+    res.json(issue);
+  } catch (err) {
+    console.error('Error approving civic issue:', err);
+    res.status(500).json({ message: 'Failed to approve civic issue' });
+  }
+}
+
+// PATCH /api/v1/civic-issues/:id/feedback
+async function submitFeedback(req, res) {
+  try {
+    const { id } = req.params;
+    const { rating, feedback } = req.body;
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+
+    const result = await db.query(
+      `UPDATE civic_issues
+       SET user_rating = $1, user_feedback = $2, updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [rating, feedback || null, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Civic issue not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error submitting feedback:', err);
+    res.status(500).json({ message: 'Failed to submit feedback' });
+  }
+}
+
 module.exports = {
   createCivicIssue,
   listCivicIssues,
   getCivicIssueById,
   updateCivicIssueStatus,
   deleteCivicIssue,
+  assignCoordinator,
+  completeIssue,
+  approveIssue,
+  submitFeedback,
 };
+
