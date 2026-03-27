@@ -92,7 +92,13 @@ async function listCivicIssues(req, res) {
              ST_X(ci.location::geometry) AS lng,
              ST_Y(ci.location::geometry) AS lat,
              u.full_name AS reporter_name,
-             u.phone AS reporter_phone
+             u.phone AS reporter_phone,
+             CASE 
+               WHEN ci.status = 'pending' AND ci.created_at < NOW() - INTERVAL '10 days' THEN 'Critical'
+               WHEN ci.status = 'pending' AND ci.created_at < NOW() - INTERVAL '5 days' THEN 'High'
+               WHEN ci.status = 'pending' AND ci.created_at < NOW() - INTERVAL '2 days' THEN 'Medium'
+               ELSE 'Low'
+             END AS priority
       FROM civic_issues ci
       LEFT JOIN users u ON u.id = ci.reporter_id
     `;
@@ -130,7 +136,13 @@ async function getCivicIssueById(req, res) {
     const result = await db.query(
       `SELECT ci.*,
               ST_X(ci.location::geometry) AS lng,
-              ST_Y(ci.location::geometry) AS lat
+              ST_Y(ci.location::geometry) AS lat,
+              CASE 
+                WHEN ci.status = 'pending' AND ci.created_at < NOW() - INTERVAL '10 days' THEN 'Critical'
+                WHEN ci.status = 'pending' AND ci.created_at < NOW() - INTERVAL '5 days' THEN 'High'
+                WHEN ci.status = 'pending' AND ci.created_at < NOW() - INTERVAL '2 days' THEN 'Medium'
+                ELSE 'Low'
+              END AS priority
        FROM civic_issues ci
        WHERE ci.id = $1`,
       [id]
